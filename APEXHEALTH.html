@@ -1,0 +1,476 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover"/>
+  <meta name="apple-mobile-web-app-capable" content="yes"/>
+  <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
+  <meta name="apple-mobile-web-app-title" content="APEXHEALTH"/>
+  <title>APEXHEALTH</title>
+  <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet"/>
+  <style>
+    :root {
+      --bg: #F2EEE6;
+      --bg2: #EAE5DB;
+      --card: #FFFFFF;
+      --ink: #0F0E0B;
+      --ink2: #2A2820;
+      --mid: #7A7568;
+      --dim: #B8B2A6;
+      --sage: #4A7C59;
+      --sage2: #6BA37A;
+      --rust: #C4501A;
+      --rust2: #E8703A;
+      --red: #C0392B;
+      --gold: #C8941A;
+      --line: #DDD8CE;
+    }
+    .dark {
+      --bg: #0C0C0A;
+      --bg2: #141410;
+      --card: #1A1A16;
+      --ink: #F2EEE6;
+      --ink2: #D4D0C6;
+      --mid: #8A8678;
+      --dim: #4A4840;
+      --sage: #6BA37A;
+      --sage2: #8EC49D;
+      --rust: #E8703A;
+      --rust2: #F4956A;
+      --red: #EF4444;
+      --gold: #F0B830;
+      --line: #2A2820;
+    }
+    * { box-sizing:border-box; margin:0; padding:0; -webkit-tap-highlight-color:transparent; }
+    html,body { background:var(--bg); font-family:'Inter',sans-serif; overscroll-behavior:none; min-height:100%; transition:background 0.3s; }
+    button { font-family:'Inter',sans-serif; cursor:pointer; }
+    input[type=number]::-webkit-inner-spin-button,
+    input[type=number]::-webkit-outer-spin-button { -webkit-appearance:none; }
+    input[type=number] { -moz-appearance:textfield; }
+
+    .app { min-height:100dvh; padding-bottom:80px; background:var(--bg); transition:background 0.3s; }
+
+    /* Bebas for big numbers */
+    .bebas { font-family:'Bebas Neue',sans-serif; letter-spacing:1px; }
+
+    /* Fuel bar */
+    .bar-track {
+      width:100%; height:10px; background:var(--line);
+      border-radius:999px; overflow:hidden;
+    }
+    .bar-fill {
+      height:100%; border-radius:999px;
+      transition:width 0.5s cubic-bezier(.4,2,.6,1);
+    }
+
+    /* Tap feedback */
+    .tap { transition:transform 0.1s, opacity 0.1s; -webkit-tap-highlight-color:transparent; }
+    .tap:active { transform:scale(0.96); opacity:0.85; }
+
+    /* Quick pill */
+    .pill {
+      flex:1; padding:10px 2px; background:var(--bg2);
+      border:1.5px solid var(--line); border-radius:12px;
+      color:var(--mid); font-weight:600; font-size:13px;
+      transition:all 0.1s; -webkit-tap-highlight-color:transparent;
+      touch-action:manipulation; user-select:none;
+    }
+    .pill:active { background:var(--card); border-color:var(--dim); color:var(--ink2); transform:scale(0.95); }
+
+    /* Mode toggle */
+    .mode-wrap { display:flex; background:var(--bg2); border-radius:14px; padding:3px; gap:3px; border:1.5px solid var(--line); }
+    .mode-btn { flex:1; padding:9px; border-radius:12px; border:none; background:transparent; color:var(--mid); font-weight:700; font-size:13px; transition:all 0.15s; }
+
+    /* Tab bar */
+    .tabbar { position:fixed; bottom:0; left:0; right:0; display:flex; background:var(--bg); border-top:1.5px solid var(--line); padding-bottom:env(safe-area-inset-bottom); z-index:50; backdrop-filter:blur(20px); -webkit-backdrop-filter:blur(20px); transition:background 0.3s, border-color 0.3s; }
+    .tab-btn { flex:1; padding:12px 0 10px; background:transparent; border:none; display:flex; flex-direction:column; align-items:center; gap:3px; }
+    .tab-indicator { width:20px; height:3px; border-radius:999px; margin-top:2px; }
+
+    /* Section divider */
+    .divider { height:1px; background:var(--line); margin:0 -16px; }
+
+    /* Tracker block */
+    .tracker-block { background:var(--card); border-radius:20px; overflow:hidden; border:1.5px solid var(--line); }
+
+    @keyframes slideUp { from { transform:translateY(100%); opacity:0; } to { transform:translateY(0); opacity:1; } }
+    .modal-sheet { animation:slideUp 0.3s cubic-bezier(.4,0,.2,1); }
+  </style>
+</head>
+<body>
+<div id="app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+<script>
+const { useState, useEffect, useRef, createElement: h } = React;
+
+const CAL_QUICK = [10, 50, 100, 500];
+const PRO_QUICK = [10, 50, 100, 500];
+const DEFAULT_GOALS = { cal: 2000, pro: 150 };
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const DAYS = ["Su","Mo","Tu","We","Th","Fr","Sa"];
+
+function getTodayET() {
+  return new Date(new Date().getTime()-4*60*60*1000).toISOString().slice(0,10);
+}
+function load() {
+  try { return JSON.parse(localStorage.getItem('APEXHEALTH_v4')||'null'); }
+  catch { return null; }
+}
+function save(s) { localStorage.setItem('APEXHEALTH_v4', JSON.stringify(s)); }
+
+// ── Tracker block: horizontal bar style ─────────────────────────────────────
+function TrackerBlock({ label, icon, colorVar, value, goal, quick, onAdd, onSetGoal }) {
+  const [input, setInput] = useState('');
+  const [gInput, setGInput] = useState(String(goal));
+  const [editGoal, setEditGoal] = useState(false);
+  const [mode, setMode] = useState('add');
+  const pct = Math.min(Math.round((value/goal)*100), 100);
+  const left = Math.max(goal-value, 0);
+  const done = value >= goal;
+  const sub = mode === 'sub';
+
+  const act = (amt) => {
+    const n = parseFloat(amt);
+    if (!isNaN(n) && n > 0) onAdd(sub ? -Math.round(n) : Math.round(n));
+    setInput('');
+  };
+  const saveGoal = () => {
+    const n = parseFloat(gInput);
+    if (!isNaN(n) && n > 0) onSetGoal(Math.round(n));
+    setEditGoal(false);
+  };
+
+  const barColor = sub ? 'var(--red)' : done ? 'var(--gold)' : `var(${colorVar})`;
+  const accentColor = sub ? 'var(--red)' : `var(${colorVar})`;
+
+  return h('div', { className:'tracker-block', style:{ marginBottom:10 } },
+    // Top row: icon + label + goal + big number
+    h('div', { style:{ padding:'16px 16px 12px', display:'flex', alignItems:'flex-start', justifyContent:'space-between' } },
+      h('div', { style:{ display:'flex', alignItems:'center', gap:10 } },
+        h('span', { style:{ fontSize:22 } }, icon),
+        h('div', null,
+          h('div', { style:{ fontWeight:700, fontSize:15, color:'var(--ink)', letterSpacing:-0.2 } }, label),
+          h('div', { style:{ fontSize:11, color:'var(--mid)', fontWeight:500, marginTop:1 } },
+            left === 0 ? '✓ Goal reached!' : `${left} left`
+          )
+        )
+      ),
+      h('div', { style:{ display:'flex', flexDirection:'column', alignItems:'flex-end', gap:2 } },
+        h('div', { className:'bebas', style:{ fontSize:48, color:barColor, lineHeight:1, transition:'color 0.3s' } }, value),
+        editGoal
+          ? h('div', { style:{ display:'flex', gap:4, alignItems:'center' } },
+              h('input', { value:gInput, onChange:e=>setGInput(e.target.value), onKeyDown:e=>e.key==='Enter'&&saveGoal(), inputMode:'numeric', autoFocus:true,
+                style:{ width:60, background:'var(--bg2)', border:`1.5px solid ${accentColor}`, borderRadius:8, color:'var(--ink)', padding:'3px 7px', fontSize:12, outline:'none', textAlign:'right' } }),
+              h('button', { onClick:saveGoal, className:'tap', style:{ background:accentColor, border:'none', borderRadius:8, color:'#fff', padding:'3px 8px', fontWeight:700, fontSize:11 } }, '✓')
+            )
+          : h('button', { onClick:()=>{ setGInput(String(goal)); setEditGoal(true); }, style:{ background:'transparent', border:'none', color:'var(--dim)', fontSize:11, fontWeight:600, padding:0, letterSpacing:0.3 } }, '/ '+goal)
+      )
+    ),
+    // Progress bar
+    h('div', { style:{ padding:'0 16px 14px' } },
+      h('div', { className:'bar-track' },
+        h('div', { className:'bar-fill', style:{ width:`${pct}%`, background:barColor } })
+      ),
+      h('div', { style:{ display:'flex', justifyContent:'space-between', marginTop:5 } },
+        h('span', { style:{ fontSize:10, color:'var(--dim)', fontWeight:600, letterSpacing:0.5 } }, pct+'% DONE'),
+        h('span', { style:{ fontSize:10, color:'var(--dim)', fontWeight:600, letterSpacing:0.5 } }, left===0?'COMPLETE':'REMAINING: '+left)
+      )
+    ),
+    // Divider
+    h('div', { className:'divider' }),
+    // Add/Remove toggle
+    h('div', { style:{ padding:'10px 12px 8px' } },
+      h('div', { className:'mode-wrap' },
+        ...['add','sub'].map(m =>
+          h('button', { key:m, className:'mode-btn tap', onClick:()=>setMode(m), style:{
+            background: mode===m ? (m==='sub'?'var(--red)':accentColor) : 'transparent',
+            color: mode===m ? '#fff' : 'var(--mid)',
+            boxShadow: mode===m ? `0 2px 10px ${m==='sub'?'var(--red)':accentColor}50` : 'none',
+          } }, m==='add'?'＋ Add':'－ Remove')
+        )
+      )
+    ),
+    // Quick pills
+    h('div', { style:{ display:'flex', gap:6, padding:'0 12px 10px' } },
+      ...quick.map(amt =>
+        h('button', { key:amt, className:'pill tap', onClick:()=>act(amt),
+          style:{ color: sub ? 'var(--red)' : 'var(--mid)' }
+        }, (sub?'−':'+')+amt)
+      )
+    ),
+    // Custom input
+    h('div', { className:'divider' }),
+    h('div', { style:{ display:'flex', gap:0 } },
+      h('input', {
+        type:'number', inputMode:'numeric',
+        placeholder: sub ? 'enter amount to remove...' : 'enter custom amount...',
+        value:input, onChange:e=>setInput(e.target.value),
+        onKeyDown:e=>e.key==='Enter'&&act(input),
+        onFocus:e=>e.target.style.borderColor=accentColor,
+        onBlur:e=>e.target.style.borderColor='transparent',
+        style:{ flex:1, background:'transparent', border:'2px solid transparent', borderRadius:0, borderBottomLeftRadius:18, color:'var(--ink)', padding:'13px 16px', fontSize:15, outline:'none', WebkitAppearance:'none', transition:'border-color 0.2s', fontFamily:"'Inter',sans-serif" }
+      }),
+      h('button', { className:'tap', onClick:()=>act(input), style:{
+        background: sub?'var(--red)':accentColor,
+        border:'none', borderBottomRightRadius:18,
+        color:'#fff', padding:'13px 22px',
+        fontWeight:800, fontSize:22,
+        boxShadow: `0 -2px 16px ${sub?'var(--red)':accentColor}30`,
+        minWidth:58,
+      } }, sub?'−':'+')
+    )
+  );
+}
+
+// ── Creatine pill (single line, compact) ─────────────────────────────────────
+function CreatinePill({ taken, onToggle }) {
+  return h('button', { className:'tap', onClick:onToggle, style:{
+    width:'100%', background:'var(--card)',
+    border:`1.5px solid ${taken?'var(--sage2)':'var(--line)'}`,
+    borderRadius:16, padding:'12px 16px',
+    display:'flex', alignItems:'center', justifyContent:'space-between',
+    boxShadow: taken ? '0 0 20px rgba(74,124,89,0.2)' : 'none',
+    transition:'all 0.25s',
+    WebkitTapHighlightColor:'transparent',
+  } },
+    h('div', { style:{ display:'flex', alignItems:'center', gap:10 } },
+      h('span', { style:{ fontSize:18 } }, '🧪'),
+      h('span', { style:{ fontWeight:700, fontSize:14, color:'var(--ink)', letterSpacing:-0.2 } }, 'Creatine'),
+      h('span', { style:{ fontSize:12, color: taken?'var(--sage)':'var(--dim)', fontWeight:600, transition:'color 0.25s' } }, taken?'· taken today':'· tap to log')
+    ),
+    h('div', { style:{
+      width:50, height:28, borderRadius:999,
+      background: taken?'var(--sage)':'var(--bg2)',
+      border:`1.5px solid ${taken?'var(--sage)':'var(--line)'}`,
+      position:'relative', transition:'all 0.25s', flexShrink:0,
+    } },
+      h('div', { style:{ width:20, height:20, borderRadius:'50%', background:'#fff', position:'absolute', top:3, left:taken?26:3, transition:'left 0.25s cubic-bezier(.4,2,.55,1)', boxShadow:'0 1px 4px rgba(0,0,0,0.2)' } })
+    )
+  );
+}
+
+// ── Calendar page ─────────────────────────────────────────────────────────────
+function CalPage({ history }) {
+  const today = getTodayET();
+  const td = new Date(today+'T12:00:00');
+  const [yr, setYr] = useState(td.getFullYear());
+  const [mo, setMo] = useState(td.getMonth());
+
+  const firstDay = new Date(yr, mo, 1).getDay();
+  const dim = new Date(yr, mo+1, 0).getDate();
+  const cells = [];
+  for (let i=0;i<firstDay;i++) cells.push(null);
+  for (let d=1;d<=dim;d++) cells.push(d);
+
+  const mk = `${yr}-${String(mo+1).padStart(2,'0')}`;
+  let hit=0, tracked=0;
+  for (let d=1;d<=dim;d++) {
+    const k=`${mk}-${String(d).padStart(2,'0')}`;
+    const e=history[k];
+    if (k<=today&&e) { tracked++; if(e.calHit&&e.proHit) hit++; }
+  }
+  const score = tracked>0 ? Math.round((hit/tracked)*100) : null;
+
+  const getStatus = (d) => {
+    const k=`${mk}-${String(d).padStart(2,'0')}`;
+    if (k>today) return 'future';
+    const e=history[k];
+    if (!e) return 'miss';
+    if (e.calHit&&e.proHit) return 'full';
+    if (e.calHit||e.proHit) return 'half';
+    return 'miss';
+  };
+
+  const cellStyle = (status, isToday) => {
+    if (isToday) return { background:'var(--ink)', color:'var(--bg)', fontWeight:800, border:'none' };
+    switch(status){
+      case 'full': return { background:'rgba(74,124,89,0.15)', color:'var(--sage)', fontWeight:700, border:'1.5px solid rgba(74,124,89,0.4)' };
+      case 'half': return { background:'rgba(196,80,26,0.1)', color:'var(--rust)', fontWeight:700, border:'1.5px solid rgba(196,80,26,0.3)' };
+      case 'miss': return { background:'rgba(192,57,43,0.08)', color:'var(--red)', fontWeight:500, border:'1px solid rgba(192,57,43,0.2)' };
+      default:     return { background:'transparent', color:'var(--dim)', fontWeight:400, border:'none' };
+    }
+  };
+
+  return h('div', { style:{ padding:'0 14px 20px' } },
+    // Nav
+    h('div', { style:{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:16 } },
+      h('button', { className:'tap', onClick:()=>mo===0?(setMo(11),setYr(y=>y-1)):setMo(m=>m-1), style:{ background:'var(--card)', border:'1.5px solid var(--line)', borderRadius:12, color:'var(--mid)', width:40, height:40, fontSize:20, display:'flex', alignItems:'center', justifyContent:'center' } }, '‹'),
+      h('div', { style:{ textAlign:'center' } },
+        h('div', { className:'bebas', style:{ fontSize:24, color:'var(--ink)', letterSpacing:1 } }, MONTHS[mo].toUpperCase()),
+        h('div', { style:{ fontSize:11, color:'var(--dim)', fontWeight:600 } }, yr)
+      ),
+      h('button', { className:'tap', onClick:()=>mo===11?(setMo(0),setYr(y=>y+1)):setMo(m=>m+1), style:{ background:'var(--card)', border:'1.5px solid var(--line)', borderRadius:12, color:'var(--mid)', width:40, height:40, fontSize:20, display:'flex', alignItems:'center', justifyContent:'center' } }, '›')
+    ),
+    // Score
+    h('div', { style:{ background:'var(--card)', border:'1.5px solid var(--line)', borderRadius:20, padding:'18px', marginBottom:14, display:'flex', alignItems:'center', justifyContent:'space-between' } },
+      h('div', null,
+        h('div', { style:{ fontSize:10, color:'var(--dim)', letterSpacing:2, textTransform:'uppercase', fontWeight:700 } }, 'Consistency'),
+        h('div', { className:'bebas', style:{ fontSize:52, color:score!==null?'var(--sage)':'var(--dim)', lineHeight:1, letterSpacing:1 } }, score!==null?score+'%':'—'),
+        h('div', { style:{ fontSize:12, color:'var(--mid)', marginTop:4, fontWeight:500 } }, `${hit} / ${tracked} days both targets hit`)
+      ),
+      h('div', { style:{ fontSize:42 } }, score===null?'📅':score>=80?'🔥':score>=50?'💪':'📈')
+    ),
+    // Legend
+    h('div', { style:{ display:'flex', gap:16, marginBottom:12 } },
+      ...[['var(--sage)','Both'],['var(--rust)','One'],['var(--red)','Missed']].map(([c,l])=>
+        h('div',{key:l,style:{display:'flex',alignItems:'center',gap:5}},
+          h('div',{style:{width:8,height:8,borderRadius:'50%',background:c}}),
+          h('span',{style:{fontSize:11,color:'var(--mid)',fontWeight:600}},l)
+        )
+      )
+    ),
+    // Days header
+    h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', marginBottom:6 } },
+      ...DAYS.map(d=>h('div',{key:d,style:{textAlign:'center',fontSize:11,color:'var(--dim)',fontWeight:700,letterSpacing:0.5}},d))
+    ),
+    // Grid
+    h('div', { style:{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:'5px 3px' } },
+      ...cells.map((d,i)=>{
+        if (!d) return h('div',{key:'e'+i});
+        const k=`${mk}-${String(d).padStart(2,'0')}`;
+        const s = cellStyle(getStatus(d), k===today);
+        return h('div',{key:d,style:{display:'flex',justifyContent:'center'}},
+          h('div',{style:{width:36,height:36,borderRadius:10,...s,display:'flex',alignItems:'center',justifyContent:'center',fontSize:12}},d)
+        );
+      })
+    )
+  );
+}
+
+// ── App root ──────────────────────────────────────────────────────────────────
+function App() {
+  const [dark, setDark] = useState(false);
+  const [page, setPage] = useState('tracker');
+  const [cal, setCal] = useState(0);
+  const [pro, setPro] = useState(0);
+  const [creatine, setCreatine] = useState(false);
+  const [goals, setGoals] = useState(DEFAULT_GOALS);
+  const [date, setDate] = useState(getTodayET());
+  const [history, setHistory] = useState({});
+  const [resetModal, setResetModal] = useState(false);
+  const timer = useRef(null);
+
+  const pushHistory = (cv,pv,gv,dt,hist) => {
+    const u = {...hist,[dt]:{calHit:cv>=gv.cal,proHit:pv>=gv.pro,cal:cv,pro:pv}};
+    setHistory(u); return u;
+  };
+
+  useEffect(()=>{
+    const s=load(), today=getTodayET();
+    if (s) {
+      const hist=s.history||{};
+      if (s.date!==today) {
+        if (s.date) hist[s.date]={calHit:(s.cal||0)>=(s.goals?.cal||2000),proHit:(s.pro||0)>=(s.goals?.pro||150),cal:s.cal||0,pro:s.pro||0};
+        setCal(0);setPro(0);setCreatine(false);setDate(today);setHistory(hist);setGoals(s.goals||DEFAULT_GOALS);
+      } else {
+        setCal(s.cal??0);setPro(s.pro??0);setCreatine(s.creatine??false);
+        setDate(s.date??today);setHistory(hist);setGoals(s.goals||DEFAULT_GOALS);
+      }
+      if (s.dark!==undefined) setDark(s.dark);
+    }
+  },[]);
+
+  useEffect(()=>{
+    const hist=pushHistory(cal,pro,goals,date,history);
+    save({cal,pro,creatine,goals,date,history:hist,dark});
+  },[cal,pro,creatine,goals,date,dark]);
+
+  useEffect(()=>{
+    document.documentElement.className = dark?'dark':'';
+    document.body.style.background = dark?'#0C0C0A':'#F2EEE6';
+  },[dark]);
+
+  useEffect(()=>{
+    function sched(){
+      const now=new Date(),next=new Date(now);
+      next.setUTCHours(4,0,0,0);
+      if(next<=now)next.setUTCDate(next.getUTCDate()+1);
+      timer.current=setTimeout(()=>{const t=getTodayET();setCal(0);setPro(0);setCreatine(false);setDate(t);sched();},next-now);
+    }
+    sched(); return()=>clearTimeout(timer.current);
+  },[]);
+
+  const doReset=()=>{setCal(0);setPro(0);setCreatine(false);setDate(getTodayET());setResetModal(false);};
+
+  return h('div', { className:'app' },
+
+    // ── Header ──────────────────────────────────────────────────────────────
+    h('div', { style:{ padding:'54px 16px 16px', borderBottom:'1.5px solid var(--line)' } },
+      h('div', { style:{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:14 } },
+        // Logo
+        h('div', { style:{ display:'flex', alignItems:'center', gap:8 } },
+          h('span', { style:{ fontSize:22 } }, '🌿'),
+          h('span', { className:'bebas', style:{ fontSize:26, color:'var(--ink)', letterSpacing:2, lineHeight:1 } }, 'APEXHEALTH')
+        ),
+        // Controls
+        h('div', { style:{ display:'flex', gap:8 } },
+          h('button', { className:'tap', onClick:()=>setDark(d=>!d), style:{ background:'var(--bg2)', border:'1.5px solid var(--line)', borderRadius:10, padding:'7px 11px', fontSize:14, color:'var(--mid)' } }, dark?'☀️':'🌙'),
+          page==='tracker' && h('button', { className:'tap', onClick:()=>setResetModal(true), style:{ background:'rgba(192,57,43,0.1)', border:'1.5px solid rgba(192,57,43,0.25)', borderRadius:10, color:'var(--red)', padding:'7px 12px', fontWeight:700, fontSize:12, letterSpacing:0.3 } }, 'RESET')
+        )
+      ),
+      // Summary row
+      page==='tracker' && h('div', { style:{ display:'flex', gap:0 } },
+        // Cal summary
+        h('div', { style:{ flex:1, paddingRight:14 } },
+          h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:5 } },
+            h('span', { style:{ fontSize:10, color:'var(--dim)', fontWeight:700, letterSpacing:1.5 } }, '🔥 CALORIES'),
+            h('span', { className:'bebas', style:{ fontSize:16, color:'var(--rust)', letterSpacing:0.5 } }, cal+'/'+goals.cal)
+          ),
+          h('div', { className:'bar-track', style:{ height:6 } },
+            h('div', { className:'bar-fill', style:{ width:`${Math.min(cal/goals.cal*100,100)}%`, background:'var(--rust)' } })
+          )
+        ),
+        h('div', { style:{ width:'1.5px', background:'var(--line)', margin:'0 0', borderRadius:999 } }),
+        // Pro summary
+        h('div', { style:{ flex:1, paddingLeft:14 } },
+          h('div', { style:{ display:'flex', justifyContent:'space-between', alignItems:'baseline', marginBottom:5 } },
+            h('span', { style:{ fontSize:10, color:'var(--dim)', fontWeight:700, letterSpacing:1.5 } }, '💪 PROTEIN'),
+            h('span', { className:'bebas', style:{ fontSize:16, color:'var(--sage)', letterSpacing:0.5 } }, pro+'/'+goals.pro)
+          ),
+          h('div', { className:'bar-track', style:{ height:6 } },
+            h('div', { className:'bar-fill', style:{ width:`${Math.min(pro/goals.pro*100,100)}%`, background:'var(--sage)' } })
+          )
+        )
+      ),
+      page==='tracker' && h('div', { style:{ fontSize:11, color:'var(--dim)', fontWeight:500, marginTop:8 } }, date)
+    ),
+
+    // ── Content ──────────────────────────────────────────────────────────────
+    page==='tracker'
+      ? h('div', { style:{ padding:'12px 14px 0', display:'flex', flexDirection:'column', gap:10 } },
+          h(TrackerBlock, { label:'Calories', icon:'🔥', colorVar:'--rust', value:cal, goal:goals.cal, quick:CAL_QUICK, onAdd:n=>setCal(c=>Math.max(0,c+n)), onSetGoal:n=>setGoals(g=>({...g,cal:n})) }),
+          h(TrackerBlock, { label:'Protein', icon:'💪', colorVar:'--sage', value:pro, goal:goals.pro, quick:PRO_QUICK, onAdd:n=>setPro(p=>Math.max(0,p+n)), onSetGoal:n=>setGoals(g=>({...g,pro:n})) }),
+          h(CreatinePill, { taken:creatine, onToggle:()=>setCreatine(v=>!v) })
+        )
+      : h('div', { style:{ paddingTop:14 } }, h(CalPage, { history })),
+
+    // ── Tab bar ───────────────────────────────────────────────────────────────
+    h('div', { className:'tabbar' },
+      ...[{id:'tracker',icon:'🔥',lbl:'TODAY',c:'var(--rust)'},{id:'calendar',icon:'📅',lbl:'HISTORY',c:'var(--sage)'}].map(({id,icon,lbl,c})=>
+        h('button', { key:id, className:'tab-btn tap', onClick:()=>setPage(id) },
+          h('span', { style:{ fontSize:22, opacity:page===id?1:0.22 } }, icon),
+          h('span', { className:'bebas', style:{ fontSize:13, color:page===id?c:'var(--dim)', letterSpacing:1, transition:'color 0.2s' } }, lbl),
+          page===id && h('div', { className:'tab-indicator', style:{ background:c, boxShadow:`0 0 8px ${c}` } })
+        )
+      )
+    ),
+
+    // ── Reset modal ───────────────────────────────────────────────────────────
+    resetModal && h('div', { onClick:()=>setResetModal(false), style:{ position:'fixed', inset:0, background:'rgba(0,0,0,0.55)', backdropFilter:'blur(10px)', WebkitBackdropFilter:'blur(10px)', display:'flex', alignItems:'flex-end', justifyContent:'center', zIndex:100, padding:'0 14px 40px' } },
+      h('div', { className:'modal-sheet', onClick:e=>e.stopPropagation(), style:{ background:'var(--card)', border:'1.5px solid var(--line)', borderRadius:28, padding:'28px 20px', width:'100%', maxWidth:400, display:'flex', flexDirection:'column', gap:12 } },
+        h('div', { style:{ textAlign:'center', marginBottom:4 } },
+          h('div', { style:{ fontSize:38, marginBottom:10 } }, '🗑️'),
+          h('div', { className:'bebas', style:{ fontSize:28, color:'var(--ink)', letterSpacing:1 } }, 'RESET TODAY?'),
+          h('div', { style:{ fontSize:13, color:'var(--mid)', marginTop:6, lineHeight:1.5 } }, 'Clears calories, protein & creatine. Goals & history stay.')
+        ),
+        h('button', { className:'tap', onClick:doReset, style:{ background:'var(--red)', border:'none', borderRadius:16, color:'#fff', padding:'16px', fontWeight:800, fontSize:15, letterSpacing:0.3 } }, 'YES, RESET'),
+        h('button', { className:'tap', onClick:()=>setResetModal(false), style:{ background:'var(--bg2)', border:'1.5px solid var(--line)', borderRadius:16, color:'var(--mid)', padding:'14px', fontWeight:700, fontSize:14 } }, 'Cancel')
+      )
+    )
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('app')).render(h(App));
+</script>
+</body>
+</html>
